@@ -45,6 +45,7 @@ Do not pass `transform_y` directly as a top-level arg.
 
 ### VFX / Transition APIs
 
+- `add_filter_simple(filter_name, video_segment=None, intensity=100.0, track_name=None)`
 - `add_effect_simple(effect_name, start_time=None, duration="3s", track_name="EffectTrack")`
 - `add_transition_simple(transition_name, video_segment=None, duration="1s", track_name=None)`
 - `add_web_asset_safe(html_path, start_time=None, duration="5s", track_name="WebVfxTrack", output_dir=None)`

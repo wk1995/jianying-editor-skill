@@ -14,7 +14,7 @@ if scripts_path not in sys.path:
     sys.path.insert(0, scripts_path)
 
 from cloud_manager import CloudManager
-from core.mocking_ops import MockAudioMaterial
+from core.mocking_ops import MockAudioMaterial, MockVideoMaterial
 from jy_wrapper import JyProject, draft
 from utils.formatters import safe_tim
 
@@ -90,6 +90,30 @@ class TestJyWrapper(unittest.TestCase):
         # 我们这里主要测试 Wrapper 的健壮性。
         p.add_transition_simple("BlackFade", duration="0.5s", track_name="V1")
         # 只要不报错 Crash 就算通过
+
+    def test_04b_add_filter_simple(self):
+        """测试滤镜能挂到视频片段上"""
+        p = JyProject("TestFilter", drafts_root=self.test_output)
+
+        def fake_video_material(path, duration=None):
+            mat = MockVideoMaterial(
+                f"mat_{os.path.basename(path)}",
+                duration or 3000000,
+                "TestVideo",
+                path,
+            )
+            mat.width = 1920
+            mat.height = 1080
+            return mat
+
+        with patch("core.media_ops.draft.VideoMaterial", side_effect=fake_video_material):
+            seg = p.add_media_safe(self.test_media, "0s", "3s", track_name="V1")
+
+        self.assertIsNotNone(seg)
+        filt = p.add_filter_simple("哈苏蓝", track_name="V1", intensity=70)
+        self.assertIsNotNone(filt)
+        self.assertEqual(len(seg.filters), 1)
+        self.assertEqual(len(p.script.materials.filters), 1)
 
     def test_05_project_name_sanitization(self):
         """测试 project_name 会被安全化且不越界到 root 外"""

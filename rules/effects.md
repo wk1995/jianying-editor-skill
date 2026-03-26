@@ -33,17 +33,50 @@ python <SKILL_ROOT>/scripts/asset_search.py "故障" -c video_scene_effects
 
 Once you have the ID, apply it using the wrapper.
 
-*Note: The current `JyProject` wrapper exposes specific methods for effects. If a direct method like `add_effect(id)` is not explicitly documented in the wrapper, you may need to use `add_media_safe` if the effect is treated as a track item, or use advanced internal methods.*
+## 2A. Preferred High-Level APIs
+
+For normal editing requests, prefer these wrapper methods instead of inventing new API names:
+
+```python
+seg1 = project.add_media_safe("clip1.mp4", "0s", "3s", track_name="V1")
+seg2 = project.add_media_safe("clip2.mp4", "3s", "3s", track_name="V1")
+
+project.add_filter_simple("哈苏蓝", video_segment=seg1, intensity=70)
+project.add_effect_simple("复古DV", start_time="0s", duration="3s")
+project.add_transition_simple("叠化", video_segment=seg1, duration="0.5s")
+```
+
+Rules:
+- Filters should usually target a concrete `video_segment`.
+- Transitions should usually target the previous clip. Prefer passing `video_segment=seg1` explicitly.
+- Only use `track_name="V1"` auto-resolution for transitions when the track already contains at least two video clips.
+- If any VFX method returns `None`, treat that as failure and report the exact reason to the user.
 
 **(Common Pattern for Transitions)**
-Transitions are usually applied between clips. Current wrapper support for specific transition transitions on clips may vary. Check `jy_wrapper.py` for `add_transition` capability.
+Transitions are applied between clips. Do not just say "done" after calling the API. You must verify the draft content.
 
 **(Common Pattern for Global Effects)**
 Effects often sit on their own track above the main video.
 ```python
-# Conceptual example - verify against jy_wrapper.py actual code if method exists
-# project.add_effect("1234567", start_time="0s", duration="5s")
+project.add_effect_simple("故障", start_time="0s", duration="5s")
 ```
 
-*Self-Correction*: If the `jy_wrapper.py` only supports basic media/text, use `asset_search` primarily to inform the user or configuration files. If `add_effect` is not present, request the user to add it manually or extend the wrapper.
-*(Assuming `add_effect` or similar capability exists or is planned as part of the "Generative Editing" vision described in original SKILL.md)*
+## 3. Mandatory Verification
+
+After generating a draft with filters / effects / transitions, inspect the saved draft and verify:
+- `materials.filters` is non-empty when you claim a filter was added.
+- `materials.video_effects` is non-empty when you claim an effect was added.
+- `materials.transitions` is non-empty when you claim a transition was added.
+
+Use one of these:
+
+```bash
+python <SKILL_ROOT>/scripts/draft_inspector.py summary --name "DraftName"
+python <SKILL_ROOT>/scripts/draft_inspector.py show --name "DraftName" --kind content --json
+```
+
+If the verification fails, do not report success. Explain whether the failure came from:
+- unresolved asset name
+- no valid video segment to attach
+- no second clip for transition
+- draft save / patch failure

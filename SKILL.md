@@ -41,9 +41,18 @@ Read the individual rule files for specific tasks and constraints:
 
 - 云端视频 + 云端音乐：`rules/media.md` + `rules/audio-voice.md` -> `examples/cloud_video_music_tts_demo.py`
 - 旁白与字幕对齐：`rules/text.md` + `rules/audio-voice.md` -> `examples/cloud_video_music_tts_demo.py`
+- 滤镜 / 特效 / 转场：`rules/effects.md` -> 优先调用 `add_filter_simple()` / `add_effect_simple()` / `add_transition_simple()`
 - 录屏与智能变焦：`rules/recording.md` -> `tools/recording/recorder.py`
 - 批量导出/无头导出：`rules/core.md` + `rules/cli.md` -> `examples/robust_auto_export.py`
 - 影视解说生成：`rules/generative.md` -> `scripts/movie_commentary_builder.py`
+
+## ✅ VFX 调用约定
+
+- 给视频片段加滤镜：优先使用 `project.add_filter_simple("哈苏蓝", video_segment=seg)`。
+- 给时间轴加特效：优先使用 `project.add_effect_simple("复古DV", start_time="0s", duration="3s")`。
+- 给两个视频片段之间加转场：优先保存前一个片段引用，再调用 `project.add_transition_simple("叠化", video_segment=seg1, duration="0.5s")`。
+- 只有在明确知道轨道上已有至少两个视频片段时，才允许用 `track_name="V1"` 让包装层自动推断转场锚点。
+- 生成完成后，必须检查草稿是否真的写入了 `filters`、`video_effects`、`transitions`，不能只依据 AI 自己的口头说明判断成功。
 
 ## 📖 经典示例 (Examples)
 
