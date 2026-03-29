@@ -55,11 +55,111 @@ class JyProject(JyProjectBase, MediaOpsMixin, TextOpsMixin, VfxOpsMixin, Mocking
         # 同步 materials 到 draft_info.json（剪映 macOS 5.9+ 需要）
         self._sync_draft_info()
         
+        # 应用字幕样式设置（如果用户通过 set_subtitle_style 设定了样式）
+        self._apply_subtitle_styles()
+        
         draft_path = os.path.join(self.root, self.name)
         if os.path.exists(draft_path):
             os.utime(draft_path, None)
         print(f"✅ Project '{self.name}' saved and patched.")
         return {"status": "SUCCESS", "draft_path": draft_path}
+
+    def set_subtitle_style(self, font_size: float = 5.0, scale: float = 1.0, 
+                          transform_x: float = 0.0, transform_y: float = -0.8):
+        """统一设置所有字幕的样式（字号、缩放、位置）
+        
+        Args:
+            font_size: 字体大小，建议 5-20，剪映会进一步渲染
+            scale: 缩放倍数，如 3.0 表示 300%
+            transform_x: X轴位移（像素 / 画布半高），0 为居中
+            transform_y: Y轴位移（像素 / 画布半高），负数往上，正数往下
+                         换算：transform_y = 目标像素Y / (画布高度/2)
+                         例：Y=-1740，画布3840 → transform_y = -1740 / 1920 = -0.906
+        
+        Example:
+            # 设置字幕字号14，缩放3x，Y=-1740（画布3840竖屏）
+            project.set_subtitle_style(font_size=5.0, scale=3.0, transform_y=-0.906)
+            project.save()
+        """
+        self._pending_subtitle_style = {
+            "font_size": font_size,
+            "scale": scale,
+            "transform_x": transform_x,
+            "transform_y": transform_y,
+        }
+
+    def _apply_subtitle_styles(self):
+        """将字幕样式应用到 draft_info.json 和 draft_content.json"""
+        import json
+        
+        if not getattr(self, "_pending_subtitle_style", None):
+            return
+        
+        style = self._pending_subtitle_style
+        font_size = style["font_size"]
+        scale = style["scale"]
+        tx = style["transform_x"]
+        ty = style["transform_y"]
+
+        draft_path = os.path.join(self.root, self.name)
+        draft_info_path = os.path.join(draft_path, "draft_info.json")
+        draft_content_path = os.path.join(draft_path, "draft_content.json")
+
+        if not os.path.exists(draft_info_path):
+            return
+
+        with open(draft_info_path, "r", encoding="utf-8") as f:
+            draft_info = json.load(f)
+
+        with open(draft_content_path, "r", encoding="utf-8") as f:
+            draft_content = json.load(f)
+
+        # --- 更新 draft_info.json ---
+        # 1. 更新 materials 中的字幕字号
+        for mat in draft_info.get("materials", {}).get("texts", []):
+            try:
+                c = json.loads(mat.get("content", "{}"))
+                for s in c.get("styles", []):
+                    s["size"] = font_size
+                mat["content"] = json.dumps(c, ensure_ascii=False)
+            except Exception:
+                pass
+
+        # 2. 更新 tracks 中字幕片段的缩放和位置
+        for track in draft_info.get("tracks", []):
+            if track.get("type") == "text":
+                for seg in track.get("segments", []):
+                    clip = seg.get("clip", {})
+                    clip["scale"] = {"x": scale, "y": scale}
+                    clip["transform"] = {"x": tx, "y": ty}
+
+        # --- 更新 draft_content.json ---
+        # 1. 更新 materials 中的字幕字号
+        for mat in draft_content.get("materials", {}).get("texts", []):
+            try:
+                c = json.loads(mat.get("content", "{}"))
+                for s in c.get("styles", []):
+                    s["size"] = font_size
+                mat["content"] = json.dumps(c, ensure_ascii=False)
+            except Exception:
+                pass
+
+        # 2. 更新 tracks 中字幕片段的缩放和位置
+        for track in draft_content.get("tracks", []):
+            if track.get("type") == "text":
+                for seg in track.get("segments", []):
+                    clip = seg.get("clip", {})
+                    clip["scale"] = {"x": scale, "y": scale}
+                    clip["transform"] = {"x": tx, "y": ty}
+
+        # 写回文件
+        with open(draft_info_path, "w", encoding="utf-8") as f:
+            json.dump(draft_info, f, ensure_ascii=False, indent=4)
+
+        with open(draft_content_path, "w", encoding="utf-8") as f:
+            json.dump(draft_content, f, ensure_ascii=False, indent=4)
+
+        print(f"✅ 字幕样式已应用: 字号={font_size}, 缩放={scale}x, X={tx}, Y={ty}")
 
     def _sync_draft_info(self):
         """将 draft_content.json 的 materials 同步到 draft_info.json"""

@@ -185,8 +185,60 @@ def _sync_draft_info(self):
 
 ---
 
+## v1.2.1 - 2026-03-29（字幕样式参数控制修复）
+
+**开发者**：小剪 & 薛龙龙
+
+### 🔧 核心问题：字幕样式参数不生效
+
+**症状**：`add_text_simple()` 传入 `font_size`、`transform_y` 参数后，剪映里字幕的字号、位置没有任何变化。
+
+**根因分析**：通过大量调试发现——
+
+剪映读取的字幕样式来自 **两个文件**：
+- `draft_content.json` — 主要时间线数据
+- `draft_info.json` — **剪映实际读取的元数据**（！这个发现来之不易）
+
+控制字幕样式的关键字段：
+| 作用 | 字段路径 |
+|------|---------|
+| **字号** | `materials[].content.styles[0].size` |
+| **缩放** | `tracks[].segments[].clip.scale.x / .y` |
+| **Y位置** | `tracks[].segments[].clip.transform.y` |
+
+**重要经验**：
+- `add_text_simple()` 的 `allowed_keys` 会过滤掉 `font_size`、`transform_y`，导致参数无法透传到 TextSegment
+- `pyJianYingDraft` 生成的 TextSegment 默认 `size=5.0`，`scale=1.0`，`transform.y=-0.8`
+- 字幕的 Y位置换算：`display_y = transform_y × canvas_height`
+  - 例如：Y=-1740，canvas=3840 → `transform_y = -1740/3840 = -0.4531`
+- **剪映实际读 `draft_info.json`，不是 `draft_content.json`**
+
+### ⚠️ 字幕样式设置注意事项
+
+1. **字体大小**：设置 `materials[].content.styles[0].size`，非 `font_size` 字段
+2. **缩放**：设置 `tracks[].segments[].clip.scale.x/y`（默认1.0）
+3. **Y位置**：设置 `tracks[].segments[].clip.transform.y`
+4. **必须写两个文件**：`draft_info.json` 和 `draft_content.json` 都要更新
+5. **字号+缩放配合**：例如字号5 + 缩放3x = 视觉字号15
+
+### 📐 Y位置参考换算
+
+```
+transform_y = 目标像素Y / 画布高度
+```
+
+| 目标Y（像素） | 画布高 | transform_y |
+|-------------|--------|-----------|
+| -1740 | 3840 | -0.4531 |
+| -1200 | 3840 | -0.3125 |
+| 0 | 3840 | 0.0 |
+| 1200 | 3840 | 0.3125 |
+
+---
+
 ## 🔜 待解决问题
 
 1. **版本兼容性问题**：当前 hardcode 了 `app_version: 5.9.0`，如果用户剪映版本不同可能有问题。
 2. **Python 3.14 编译问题**：`uv sync` 会因 pydantic-core 不支持 Python 3.14 而失败，需先用 `uv pip install pydantic-core` 或使用 Docker。
 3. **template.tmp 格式**：目前是空文件，可能需要是正确的 protobuf 格式才能完整工作。
+4. **字幕样式 API**：当前需要后置脚本修改 JSON，下一版本应在内核直接支持。

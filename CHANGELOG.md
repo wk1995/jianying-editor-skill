@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.2.1 - 2026-03-29（字幕样式 API 修复）
+
+**开发者**：小剪 & 薛龙龙
+
+### 🔧 核心修复
+
+1. **字幕样式参数不生效**（`jy_wrapper.py`）
+   - 新增 `set_subtitle_style()` 方法，允许统一设置所有字幕的字号、缩放、位置
+   - 解决了 `add_text_simple()` 无法通过参数控制字体样式的问题
+   - 内部直接写入 `draft_info.json` 和 `draft_content.json` 的正确字段
+
+### 📐 字幕样式换算参考
+
+```python
+# Y位置换算：transform_y = 目标像素Y / (画布高度 / 2)
+transform_y = -1740 / (3840 / 2)  # = -0.906
+
+# 使用示例
+project.set_subtitle_style(font_size=5.0, scale=3.0, transform_y=-0.906)
+project.save()
+```
+
+### 🧪 测试验证
+
+- [x] 字幕字号 5 + 缩放 3x + Y=-1740 正确显示
+
+---
+
 ## v1.2.0 - 2026-03-29（macOS 剪映 5.9+ 兼容性修复）
 
 **开发者**：小剪 & 薛龙龙
