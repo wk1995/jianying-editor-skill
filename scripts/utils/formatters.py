@@ -6,11 +6,14 @@ import functools
 
 # ----------------- 路径自动探测 -----------------
 def get_default_drafts_root() -> str:
-    """自动探测剪映草稿目录 (Windows)"""
+    """自动探测剪映草稿目录 (Windows / macOS)"""
     local_app_data = os.environ.get('LOCALAPPDATA')
     user_profile = os.environ.get('USERPROFILE')
+    home = os.environ.get('HOME')
     
     candidates = []
+    
+    # Windows
     if local_app_data:
         candidates.extend([
             os.path.join(local_app_data, "JianyingPro/User Data/Projects/com.lveditor.draft"),
@@ -20,10 +23,27 @@ def get_default_drafts_root() -> str:
     if user_profile:
         candidates.append(os.path.join(user_profile, "AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft"))
 
-    fallback = "C:/Users/Administrator/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft"
+    # macOS
+    if home:
+        candidates.extend([
+            os.path.join(home, "Movies/JianyingPro/User Data/Projects/com.lveditor.draft"),
+            os.path.join(home, "Movies/CapCut/User Data/Projects/com.lveditor.draft"),
+        ])
+
+    # Fallback
+    fallback_windows = "C:/Users/Administrator/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft"
+    fallback_macos = os.path.join(os.path.expanduser("~"), "Movies/JianyingPro/User Data/Projects/com.lveditor.draft")
+    
     for path in candidates:
-        if os.path.exists(path): return path
-    return candidates[0] if candidates else fallback
+        if os.path.exists(path):
+            return path
+    
+    # 如果候选都不存在，根据系统选择fallback
+    import sys
+    if sys.platform == "darwin":
+        return fallback_macos
+    else:
+        return fallback_windows if candidates else fallback_windows
 
 def get_all_drafts(root_path: str = None) -> List[Dict]:
     """获取所有草稿并按修改时间排序"""

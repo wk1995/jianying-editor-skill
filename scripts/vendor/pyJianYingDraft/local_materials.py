@@ -143,8 +143,21 @@ class VideoMaterial:
                 raise e
 
     def export_json(self) -> Dict[str, Any]:
+        # 检测视频是否包含音频轨道，设置 has_audio
+        has_audio = False
+        try:
+            import pymediainfo
+            info: pymediainfo.MediaInfo = pymediainfo.MediaInfo.parse(self.path, mediainfo_options={"File_TestContinuousFileNames": "0"})
+            if len(info.audio_tracks) > 0:
+                has_audio = True
+        except Exception:
+            # 如果检测失败，保守认为有音频
+            has_audio = True if self.material_type == "video" else False
+
         video_material_json = {
             "audio_fade": None,
+            "aigc_type": "none",
+            "cartoon_path": "",
             "category_id": "",
             "category_name": "local",
             "check_flag": 63487,
@@ -152,14 +165,40 @@ class VideoMaterial:
             "crop_ratio": "free",
             "crop_scale": 1.0,
             "duration": self.duration,
+            "extra_type_option": 0,
+            "formula_id": "",
+            "freeze": None,
+            "has_audio": has_audio,
             "height": self.height,
             "id": self.material_id,
+            "intensifies_audio_path": "",
+            "intensifies_path": "",
+            "is_ai_generate_content": False,
+            "is_copyright": False,
+            "is_text_edit_overdub": False,
+            "is_unified_beauty_mode": False,
             "local_material_id": self.local_material_id,
             "material_id": self.material_id,
             "material_name": self.material_name,
+            "material_url": "",
+            "matting": {"flag": 0, "has_use_quick_brush": False, "has_use_quick_eraser": False, "interactiveTime": [], "path": "", "strokes": []},
             "media_path": "",
+            "object_locked": None,
+            "origin_material_id": "",
             "path": self.path,
+            "picture_from": "none",
+            "picture_set_category_id": "",
+            "picture_set_category_name": "",
+            "request_id": "",
+            "reverse_intensifies_path": "",
+            "reverse_path": "",
+            "smart_motion": None,
+            "source": 0,
+            "source_platform": 0,
+            "stable": {"matrix_path": "", "stable_level": 0, "time_range": None},
+            "team_id": "",
             "type": self.material_type,
+            "video_algorithm": {"algorithms": [], "complement_frame_config": None, "deflicker": None, "gameplay_configs": [], "motion_blur_config": None, "noise_reduction": None, "path": "", "quality_enhance": None, "time_range": None},
             "width": self.width
         }
         return video_material_json
