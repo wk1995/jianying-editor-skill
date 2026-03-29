@@ -64,23 +64,38 @@ class JyProject(JyProjectBase, MediaOpsMixin, TextOpsMixin, VfxOpsMixin, Mocking
         print(f"✅ Project '{self.name}' saved and patched.")
         return {"status": "SUCCESS", "draft_path": draft_path}
 
-    def set_subtitle_style(self, font_size: float = 5.0, scale: float = 1.0, 
-                          transform_x: float = 0.0, transform_y: float = -0.8):
+    def set_subtitle_style(self, font_size: float = 5.0, scale: float = 1.0,
+                          x: float = 0.0, y: float = -1600):
         """统一设置所有字幕的样式（字号、缩放、位置）
-        
+
+        所有位置参数均为像素值，方法内部自动换算为剪映坐标。
+
         Args:
-            font_size: 字体大小，建议 5-20，剪映会进一步渲染
-            scale: 缩放倍数，如 3.0 表示 300%
-            transform_x: X轴位移（像素 / 画布半高），0 为居中
-            transform_y: Y轴位移（像素 / 画布半高），负数往上，正数往下
-                         换算：transform_y = 目标像素Y / (画布高度/2)
-                         例：Y=-1740，画布3840 → transform_y = -1740 / 1920 = -0.906
-        
+            font_size: 字体大小，建议 5-20。字号越小字幕越细，注意与 scale 配合。
+                      例如 font_size=5 + scale=3 的最终效果 ≈ font_size=15。
+            scale: 缩放倍数，如 3.0 表示 300%。调大字幕放大，调小字幕缩小。
+            x: X轴像素位置，默认 0 = 水平居中。
+               竖屏 2160x3840 通常设为 0 居中即可。
+            y: Y轴像素位置，默认 -1600（偏上）。
+               竖屏 9:16 常见位置参考：
+                 -1740 ~ -1600：字幕偏上（适合放演讲金句）
+                 -1200 ~ -800：字幕居中偏上
+                 0：垂直居中
+               ⚠️ 注意：竖屏画布高度 = 3840，Y=-1740 约在画布偏上1/3处。
+
         Example:
-            # 设置字幕字号14，缩放3x，Y=-1740（画布3840竖屏）
-            project.set_subtitle_style(font_size=5.0, scale=3.0, transform_y=-0.906)
+            # 竖屏 2160x3840，字号5，缩放3x，字幕偏上
+            project.set_subtitle_style(font_size=5.0, scale=3.0, x=0, y=-1740)
             project.save()
+
+            # 如果字幕偏下，可以调整 y 值（如 y=-1500 或 y=-1200）
+            # 配合 scale 参数：scale=2.5 + font_size=5.0 效果 ≈ scale=2x + font_size=8.0
         """
+        # 像素 → 剪映坐标换算
+        canvas_h = self.script.height
+        transform_x = x / (canvas_h / 2)
+        transform_y = y / (canvas_h / 2)
+        
         self._pending_subtitle_style = {
             "font_size": font_size,
             "scale": scale,
