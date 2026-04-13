@@ -37,6 +37,7 @@ class JyProjectBase:
         self.df = draft.DraftFolder(self.root)
         self.name = self._sanitize_project_name(project_name)
         self.draft_dir = self._safe_join_root(self.name)
+        self.overwrite = overwrite
         self._internal_colors = []
         self._cloud_audio_patches = {}
         self._cloud_text_patches = {}
@@ -139,9 +140,18 @@ class JyProjectBase:
             return False
 
     def get_track_duration(self, track_name: str) -> int:
-        tracks = self.script.tracks
-        iterator = tracks.values() if isinstance(tracks, dict) else (tracks if isinstance(tracks, list) else [])
-        for track in iterator:
+        # Check both script.tracks (newly added) and imported_tracks (original content)
+        all_tracks = []
+        if hasattr(self.script, 'tracks') and self.script.tracks:
+            tracks = self.script.tracks
+            if isinstance(tracks, dict):
+                all_tracks.extend(tracks.values())
+            elif isinstance(tracks, list):
+                all_tracks.extend(tracks)
+        if hasattr(self.script, 'imported_tracks') and self.script.imported_tracks:
+            all_tracks.extend(self.script.imported_tracks)
+
+        for track in all_tracks:
             if hasattr(track, "name") and getattr(track, "name") == track_name:
                 max_end = 0
                 for seg in track.segments:

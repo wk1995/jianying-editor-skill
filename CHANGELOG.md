@@ -80,3 +80,19 @@ project.save()
 - Repo organization:
   - removed tracked runtime artifacts and cache binaries.
   - added compatibility wrappers and common logger utility.
+
+## v1.3.0 (2026-04-13)
+
+### 🎬 字幕动效支持
+
+- **新增：** 字幕入场动效添加完整指南
+- **新增：** 14种已验证动效参数（吸入、放大、打字机、水平翻转、扭曲模糊、闪动、向上翻转、复古打字机、缩小、日出、向右露出、向左露出、收拢、渐显）
+- **修复：** 正确识别 Jianying 的 `draft_info.json` 为主文件（而非 `draft_content.json`）
+- **修复：** 动画三要素（animation_id、resource_id、path hash）完整格式
+- **修复：** `material_animations` 和 `extra_material_refs` 两处同时修改的正确模式
+
+### 📚 文档更新
+
+- EVOLUTION.md: v1.3.0 详细技术发现记录
+- FIXES.md: 字幕动效相关错误分析与解决方案
+- USAGE-GUIDE.md: 字幕动效添加完整教程

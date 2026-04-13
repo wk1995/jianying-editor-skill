@@ -34,9 +34,20 @@ def assign_attr_with_json(obj: object, attrs: List[str], json_data: Dict[str, An
     若有复杂类型，则尝试调用其`import_json`方法进行构造
     """
     type_hints: Dict[str, Type] = {}
+    # Python 3.14+: __annotations__ is a lazy computed property (PEP 649).
+    # We use inspect.get_annotations() for compatibility, or fall back to
+    # accessing cls.__annotations__ directly which also works.
     for cls in obj.__class__.__mro__:
-        if '__annotations__' in cls.__dict__:
-            type_hints.update(cls.__annotations__)
+        try:
+            ann = inspect.get_annotations(cls)
+            if ann:
+                type_hints.update(ann)
+        except Exception:
+            # Fallback for older Python or if get_annotations fails
+            if hasattr(cls, '__annotations__'):
+                ann = cls.__annotations__
+                if ann:
+                    type_hints.update(ann)
 
     for attr in attrs:
         if hasattr(type_hints[attr], 'import_json'):

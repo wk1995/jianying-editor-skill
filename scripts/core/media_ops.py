@@ -77,7 +77,7 @@ class MediaOpsMixin:
         start_us = safe_tim(start_time)
         src_start_us = safe_tim(source_start)
         actual_duration = self._calculate_duration(duration, phys_duration - src_start_us)
-
+        src_end_us = src_start_us + actual_duration
         seg = draft.VideoSegment(mat, trange(start_us, actual_duration), source_timerange=trange(src_start_us, actual_duration))
         self.script.add_segment(seg, track_name)
         return seg

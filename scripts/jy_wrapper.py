@@ -48,24 +48,80 @@ class JyProject(JyProjectBase, MediaOpsMixin, TextOpsMixin, VfxOpsMixin, Mocking
 
     def save(self):
         """保存并执行质检报告。"""
-        self.script.save()
+        import json as _json
+
+        draft_path = os.path.join(self.root, self.name)
+        draft_content_path = os.path.join(draft_path, "draft_content.json")
+        draft_info_path = os.path.join(draft_path, "draft_info.json")
+
+        # 1. 如果是追加模式，加载已有文件内容
+        existing_dc = None
+        existing_di = None
+        if not self.overwrite and os.path.exists(draft_content_path) and os.path.exists(draft_info_path):
+            with open(draft_content_path, "r", encoding="utf-8") as f:
+                existing_dc = _json.load(f)
+            with open(draft_info_path, "r", encoding="utf-8") as f:
+                existing_di = _json.load(f)
+
+        # 2. 触发质检（需要在保存前调用）
         self._patch_cloud_material_ids()
         self._force_activate_adjustments()
-        
-        # 同步 materials 到 draft_info.json（剪映 macOS 5.9+ 需要）
-        self._sync_draft_info()
-        
-        # 应用字幕样式设置（如果用户通过 set_subtitle_style 设定了样式）
+
+        # 3. 获取 script 保存后的完整 tracks
+        self.script.save()
+        with open(draft_content_path, "r", encoding="utf-8") as f:
+            new_dc = _json.load(f)
+
+        # 4. 如果是追加模式，合并轨道和素材
+        if existing_dc is not None:
+            # 按 (轨道名, 类型) 合并 tracks
+            tracks_map = {}
+            for t in existing_dc.get("tracks", []):
+                key = (t.get("name", ""), t.get("type", ""))
+                tracks_map[key] = t
+
+            for t in new_dc.get("tracks", []):
+                key = (t.get("name", ""), t.get("type", ""))
+                if key in tracks_map:
+                    # 合并片段
+                    exist_segs = tracks_map[key].get("segments", [])
+                    exist_ids = {s.get("id") for s in exist_segs}
+                    for seg in t.get("segments", []):
+                        if seg.get("id") not in exist_ids:
+                            exist_segs.append(seg)
+                    tracks_map[key]["segments"] = exist_segs
+                    tracks_map[key]["clip_count"] = len(exist_segs)
+                else:
+                    existing_dc["tracks"].append(t)
+
+            # 合并素材：追加新的素材（避免覆盖已有）
+            for mat_type in ["audios", "videos", "images", "texts", " stickers", "effects", "filters"]:
+                existing_mats = existing_dc.get("materials", {}).get(mat_type, [])
+                new_mats = new_dc.get("materials", {}).get(mat_type, [])
+                existing_ids = {m.get("id") for m in existing_mats}
+                for m in new_mats:
+                    if m.get("id") not in existing_ids:
+                        existing_mats.append(m)
+
+            new_dc = existing_dc
+
+        # 5. 写回合并后的 draft_content
+        with open(draft_content_path, "w", encoding="utf-8") as f:
+            _json.dump(new_dc, f, ensure_ascii=False, indent=4)
+
+        # 6. 同步到 draft_info
+        self._sync_draft_info_from_dc(new_dc)
+
+        # 7. 应用字幕样式
         self._apply_subtitle_styles()
-        
-        draft_path = os.path.join(self.root, self.name)
+
         if os.path.exists(draft_path):
             os.utime(draft_path, None)
         print(f"✅ Project '{self.name}' saved and patched.")
         return {"status": "SUCCESS", "draft_path": draft_path}
 
     def set_subtitle_style(self, font_size: float = 5.0, scale: float = 1.0,
-                          x: float = 0.0, y: float = -1600):
+                          x: float = 0.0, y: float = None):
         """统一设置所有字幕的样式（字号、缩放、位置）
 
         所有位置参数均为像素值，方法内部自动换算为剪映坐标。
@@ -75,26 +131,31 @@ class JyProject(JyProjectBase, MediaOpsMixin, TextOpsMixin, VfxOpsMixin, Mocking
                       例如 font_size=5 + scale=3 的最终效果 ≈ font_size=15。
             scale: 缩放倍数，如 3.0 表示 300%。调大字幕放大，调小字幕缩小。
             x: X轴像素位置，默认 0 = 水平居中。
-               竖屏 2160x3840 通常设为 0 居中即可。
-            y: Y轴像素位置，默认 -1600（偏上）。
-               竖屏 9:16 常见位置参考：
-                 -1740 ~ -1600：字幕偏上（适合放演讲金句）
-                 -1200 ~ -800：字幕居中偏上
-                 0：垂直居中
-               ⚠️ 注意：竖屏画布高度 = 3840，Y=-1740 约在画布偏上1/3处。
+               竖屏 720x1280 通常设为 0 居中即可。
+            y: Y轴像素位置（默认自动）。如果不传或传None，则自动设为 canvas_height / 4。
+               即字幕放在画面下方1/4处（距顶部约3/4高度位置）。
+               自动计算参考值：
+                 - 竖屏 720x1280：y ≈ -320
+                 - 竖屏 1080x1920：y ≈ -480
+                 - 竖屏 2160x3840（4K）：y ≈ -960
+               也可以手动覆盖，例如设为 -300 等微调值。
 
         Example:
-            # 竖屏 2160x3840，字号5，缩放3x，字幕偏上
-            project.set_subtitle_style(font_size=5.0, scale=3.0, x=0, y=-1740)
+            # 竖屏 2160x3840，字号5，缩放3x，自动Y位置
+            project.set_subtitle_style(font_size=5.0, scale=3.0, x=0)
             project.save()
 
-            # 如果字幕偏下，可以调整 y 值（如 y=-1500 或 y=-1200）
-            # 配合 scale 参数：scale=2.5 + font_size=5.0 效果 ≈ scale=2x + font_size=8.0
+            # 手动指定Y位置
+            project.set_subtitle_style(font_size=5.0, scale=3.0, x=0, y=-300)
+            project.save()
         """
-        # 像素 → 剪映坐标换算
+        # 像素 → 剪映坐标换算（transform = 像素Y / 画布高度）
         canvas_h = self.script.height
-        transform_x = x / (canvas_h / 2)
-        transform_y = y / (canvas_h / 2)
+        # 如果 y 未指定，自动设为画面下方1/4位置
+        if y is None:
+            y = -canvas_h / 4
+        transform_x = x / canvas_h
+        transform_y = y / canvas_h
         
         self._pending_subtitle_style = {
             "font_size": font_size,
@@ -261,6 +322,88 @@ class JyProject(JyProjectBase, MediaOpsMixin, TextOpsMixin, VfxOpsMixin, Mocking
 
         # 更新 tracks
         draft_info["tracks"] = draft_content.get("tracks", [])
+
+        # 写回 draft_info.json
+        with open(draft_info_path, "w", encoding="utf-8") as f:
+            json.dump(draft_info, f, ensure_ascii=False, indent=4)
+
+    def _sync_draft_info_from_dc(self, new_dc):
+        """将 draft_content dict 的 materials 同步到 draft_info.json"""
+        import json
+
+        draft_path = os.path.join(self.root, self.name)
+        draft_info_path = os.path.join(draft_path, "draft_info.json")
+
+        if not os.path.exists(draft_info_path):
+            return
+
+        with open(draft_info_path, "r", encoding="utf-8") as f:
+            draft_info = json.load(f)
+
+        content_materials = new_dc.get("materials", {})
+
+        # 复制关键材料数组到 draft_info
+        draft_info["materials"] = {
+            "ai_translates": content_materials.get("ai_translates", []),
+            "audio_balances": content_materials.get("audio_balances", []),
+            "audio_effects": content_materials.get("audio_effects", []),
+            "audio_fades": content_materials.get("audio_fades", []),
+            "audio_track_indexes": content_materials.get("audio_track_indexes", []),
+            "audios": content_materials.get("audios", []),
+            "beats": content_materials.get("beats", []),
+            "canvases": content_materials.get("canvases", []),
+            "chromas": content_materials.get("chromas", []),
+            "color_curves": content_materials.get("color_curves", []),
+            "digital_humans": content_materials.get("digital_humans", []),
+            "drafts": content_materials.get("drafts", []),
+            "effects": content_materials.get("effects", []),
+            "flowers": content_materials.get("flowers", []),
+            "green_screens": content_materials.get("green_screens", []),
+            "handwrites": content_materials.get("handwrites", []),
+            "hsl": content_materials.get("hsl", []),
+            "images": content_materials.get("images", []),
+            "log_color_wheels": content_materials.get("log_color_wheels", []),
+            "loudnesses": content_materials.get("loudnesses", []),
+            "manual_deformations": content_materials.get("manual_deformations", []),
+            "masks": content_materials.get("masks", []),
+            "material_animations": content_materials.get("material_animations", []),
+            "material_colors": content_materials.get("material_colors", []),
+            "multi_language_refs": content_materials.get("multi_language_refs", []),
+            "placeholders": content_materials.get("placeholders", []),
+            "plugin_effects": content_materials.get("plugin_effects", []),
+            "primary_color_wheels": content_materials.get("primary_color_wheels", []),
+            "realtime_denoises": content_materials.get("realtime_denoises", []),
+            "shapes": content_materials.get("shapes", []),
+            "smart_crops": content_materials.get("smart_crops", []),
+            "smart_relights": content_materials.get("smart_relights", []),
+            "sound_channel_mappings": content_materials.get("sound_channel_mappings", []),
+            "speeds": content_materials.get("speeds", []),
+            "stickers": content_materials.get("stickers", []),
+            "tail_leaders": content_materials.get("tail_leaders", []),
+            "text_templates": content_materials.get("text_templates", []),
+            "texts": content_materials.get("texts", []),
+            "time_marks": content_materials.get("time_marks", []),
+            "transitions": content_materials.get("transitions", []),
+            "video_effects": content_materials.get("video_effects", []),
+            "video_trackings": content_materials.get("video_trackings", []),
+            "videos": content_materials.get("videos", []),
+            "vocal_beautifys": content_materials.get("vocal_beautifys", []),
+            "vocal_separations": content_materials.get("vocal_separations", []),
+        }
+
+        # 更新时长
+        draft_info["duration"] = new_dc.get("duration", 0)
+
+        # 更新 canvas_config
+        canvas = new_dc.get("canvas_config", {})
+        draft_info["canvas_config"] = {
+            "width": canvas.get("width", self.script.width),
+            "height": canvas.get("height", self.script.height),
+            "ratio": canvas.get("ratio", "original")
+        }
+
+        # 更新 tracks
+        draft_info["tracks"] = new_dc.get("tracks", [])
 
         # 写回 draft_info.json
         with open(draft_info_path, "w", encoding="utf-8") as f:
