@@ -454,3 +454,43 @@ seg['extra_material_refs'] = refs
 
 **验证方法：** 在Jianying中打开，确认效果有动画（不是静止的）。如果没动画，说明path_hash不对。
 
+
+---
+
+### 问题：添加字幕动效时，部分字幕没有生效（v1.3.0 bug）
+
+**症状：** 用代码给所有字幕添加动效后，只有前面几个字幕有效果，后面的字幕没有。
+
+**根因：** 代码使用了 `refs.append()` 来添加动画引用。当字幕的 `extra_material_refs` 字段为空列表时：
+```python
+# 错误代码
+refs = seg.get('extra_material_refs', [])  # 如果为空，返回 []
+refs.append(anim_ref_id)  # 只在列表末尾添加
+seg['extra_material_refs'] = refs  # 但如果之前有无效引用，这里不会更新
+```
+
+实际上，部分字幕的 `extra_material_refs` 可能已经指向无效的动画条目（animations为空），但 `append` 不会替换这些无效引用。
+
+**正确代码：**
+```python
+# 正确：用赋值替换，而不是追加
+seg['extra_material_refs'] = [anim_ref_id]
+```
+
+**修复：** 
+1. 先清理 `material_animations` 中无效的条目（animations为空的）
+2. 对所有字幕段落，用赋值设置新的引用
+
+```python
+# 1. 清理无效的 material_animations
+mat_anim = info['materials'].get('material_animations', [])
+valid_mat_anim = [ma for ma in mat_anim if ma.get('animations') and len(ma['animations']) > 0]
+info['materials']['material_animations'] = valid_mat_anim
+
+# 2. 用赋值设置引用（不是追加）
+for track in info.get('tracks', []):
+    if track.get('type') == 'text':
+        for seg in track.get('segments', []):
+            seg['extra_material_refs'] = [anim_ref_id]  # 赋值，不是append
+```
+

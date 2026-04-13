@@ -96,3 +96,10 @@ project.save()
 - EVOLUTION.md: v1.3.0 详细技术发现记录
 - FIXES.md: 字幕动效相关错误分析与解决方案
 - USAGE-GUIDE.md: 字幕动效添加完整教程
+
+## v1.3.1 (2026-04-13)
+
+### Bug Fix
+
+- **修复：** 字幕动效添加 bug — 使用 `refs.append()` 导致部分字幕无法正确引用动画，必须用赋值 `seg['extra_material_refs'] = [anim_ref_id]`
+- **修复：** 添加前先清理 `material_animations` 中无效条目（animations 为空的）

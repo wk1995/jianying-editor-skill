@@ -544,9 +544,8 @@ for track in info.get('tracks', []):
     if track.get('type') == 'text':
         for seg in track.get('segments', []):
             if seg.get('material_id') == target_material_id:
-                refs = seg.get('extra_material_refs', [])
-                refs.append(anim_ref_id)  # ← 添加引用
-                seg['extra_material_refs'] = refs
+                # ⚠️ 用赋值，不是追加！否则 extra_material_refs 为空的字幕无法引用
+                seg['extra_material_refs'] = [anim_ref_id]
                 break
 ```
 
@@ -613,9 +612,8 @@ info['materials'].setdefault('material_animations', []).append(anim_entry)
 for track in info.get('tracks', []):
     if track.get('type') == 'text':
         for seg in track.get('segments', []):
-            refs = seg.get('extra_material_refs', [])
-            refs.append(anim_ref_id)
-            seg['extra_material_refs'] = refs
+            # ⚠️ 用赋值，不是追加！
+            seg['extra_material_refs'] = [anim_ref_id]
 
 with open(DRAFT_INFO, 'w') as f:
     json.dump(info, f, ensure_ascii=False, indent=2)
